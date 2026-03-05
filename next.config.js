@@ -8,7 +8,11 @@ const nextConfig = {
   },
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000'],
+      allowedOrigins: [
+        'localhost:3000',
+        'myafya-ai.vercel.app',
+        process.env.VERCEL_URL,
+      ].filter(Boolean),
     },
   },
 };
