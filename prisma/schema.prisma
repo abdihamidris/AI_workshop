@@ -1,0 +1,317 @@
+// myAfya-AI — Database Schema
+// PostgreSQL via Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User & Auth ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  avatar        String?
+  phone         String?
+  dateOfBirth   DateTime?
+  bloodType     String?
+  allergies     String[]  @default([])
+  conditions    String[]  @default([])
+  role          UserRole  @default(PATIENT)
+  isEmailVerified Boolean @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  profiles      FamilyProfile[]
+  medicines     Medicine[]
+  reminders     Reminder[]
+  adherenceLogs AdherenceLog[]
+  prescriptions Prescription[]
+  aiChats       AiChat[]
+  refillAlerts  RefillAlert[]
+  doctorShares  DoctorShare[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+enum UserRole {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+// ─── Family Profiles ─────────────────────────────────────────────────────────
+
+model FamilyProfile {
+  id          String        @id @default(cuid())
+  userId      String
+  name        String
+  relationship ProfileRelation
+  dateOfBirth DateTime?
+  avatar      String?
+  allergies   String[]      @default([])
+  conditions  String[]      @default([])
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicines Medicine[]
+
+  @@map("family_profiles")
+}
+
+enum ProfileRelation {
+  SELF
+  SPOUSE
+  CHILD
+  PARENT
+  SIBLING
+  GRANDPARENT
+  OTHER
+}
+
+// ─── Medicines ────────────────────────────────────────────────────────────────
+
+model Medicine {
+  id              String          @id @default(cuid())
+  userId          String
+  profileId       String?
+  name            String
+  genericName     String?
+  dosage          String
+  unit            DosageUnit      @default(MG)
+  form            MedicineForm    @default(TABLET)
+  frequency       FrequencyType
+  timesPerDay     Int             @default(1)
+  specificTimes   String[]        @default([])
+  startDate       DateTime
+  endDate         DateTime?
+  instructions    String?
+  color           String?
+  shape           String?
+  prescribedBy    String?
+  pillCount       Int?
+  pillsPerDose    Float           @default(1)
+  refillAt        Int?
+  isActive        Boolean         @default(true)
+  imageUrl        String?
+  sideEffects     String[]        @default([])
+  interactions    String[]        @default([])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile        FamilyProfile?  @relation(fields: [profileId], references: [id])
+  reminders      Reminder[]
+  adherenceLogs  AdherenceLog[]
+  refillAlerts   RefillAlert[]
+
+  @@map("medicines")
+}
+
+enum DosageUnit {
+  MG
+  MCG
+  G
+  ML
+  IU
+  PERCENT
+  OTHER
+}
+
+enum MedicineForm {
+  TABLET
+  CAPSULE
+  LIQUID
+  INJECTION
+  PATCH
+  CREAM
+  DROPS
+  INHALER
+  SUPPOSITORY
+  OTHER
+}
+
+enum FrequencyType {
+  DAILY
+  TWICE_DAILY
+  THREE_TIMES_DAILY
+  FOUR_TIMES_DAILY
+  EVERY_OTHER_DAY
+  WEEKLY
+  AS_NEEDED
+  CUSTOM
+}
+
+// ─── Reminders ────────────────────────────────────────────────────────────────
+
+model Reminder {
+  id          String         @id @default(cuid())
+  userId      String
+  medicineId  String
+  scheduledAt DateTime
+  status      ReminderStatus @default(PENDING)
+  takenAt     DateTime?
+  skippedAt   DateTime?
+  skipReason  String?
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@map("reminders")
+}
+
+enum ReminderStatus {
+  PENDING
+  TAKEN
+  SKIPPED
+  MISSED
+}
+
+// ─── Adherence Logs ───────────────────────────────────────────────────────────
+
+model AdherenceLog {
+  id         String       @id @default(cuid())
+  userId     String
+  medicineId String
+  date       DateTime
+  status     LogStatus
+  notes      String?
+  createdAt  DateTime     @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, medicineId, date])
+  @@map("adherence_logs")
+}
+
+enum LogStatus {
+  TAKEN
+  SKIPPED
+  MISSED
+}
+
+// ─── Prescriptions ────────────────────────────────────────────────────────────
+
+model Prescription {
+  id           String             @id @default(cuid())
+  userId       String
+  imageUrl     String
+  rawText      String?
+  parsedData   Json?
+  status       PrescriptionStatus @default(PROCESSING)
+  doctorName   String?
+  clinicName   String?
+  issuedAt     DateTime?
+  processedAt  DateTime?
+  createdAt    DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("prescriptions")
+}
+
+enum PrescriptionStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+}
+
+// ─── AI Chat ──────────────────────────────────────────────────────────────────
+
+model AiChat {
+  id        String      @id @default(cuid())
+  userId    String
+  title     String?
+  messages  AiMessage[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_chats")
+}
+
+model AiMessage {
+  id        String      @id @default(cuid())
+  chatId    String
+  role      MessageRole
+  content   String
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  chat AiChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("ai_messages")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ─── Refill Alerts ────────────────────────────────────────────────────────────
+
+model RefillAlert {
+  id         String    @id @default(cuid())
+  userId     String
+  medicineId String
+  alertAt    DateTime
+  refillAt   DateTime?
+  pillsLeft  Int
+  isRead     Boolean   @default(false)
+  isDismissed Boolean  @default(false)
+  createdAt  DateTime  @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@map("refill_alerts")
+}
+
+// ─── Doctor Sharing ───────────────────────────────────────────────────────────
+
+model DoctorShare {
+  id           String    @id @default(cuid())
+  userId       String
+  doctorName   String?
+  doctorEmail  String?
+  shareToken   String    @unique @default(cuid())
+  expiresAt    DateTime
+  isActive     Boolean   @default(true)
+  accessCount  Int       @default(0)
+  lastAccessed DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_shares")
+}
